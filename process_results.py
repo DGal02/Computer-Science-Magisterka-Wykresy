@@ -475,7 +475,7 @@ def generate_plots():
                         
                         if not best_run.empty:
                             samples_count = best_run["resource_samples"].iloc[0]
-                            if samples_count < 30:
+                            if samples_count < 15:
                                 skipped_resource_plots.append({
                                     "system": sys.upper(),
                                     "host": host_sys.upper(),
@@ -486,7 +486,7 @@ def generate_plots():
                                     "samples": int(samples_count)
                                 })
                             
-                            if samples_count >= 30:
+                            if samples_count >= 15:
                                 run_id = best_run["run_id"].iloc[0]
                                 stats_file = os.path.join(DATA_DIR, sys, host_sys, run_id, payload, str(it), f"workers-{max_workers}", "stats_insert.csv")
                                 
