@@ -364,6 +364,14 @@ def generate_plots():
                     if it == 0:
                         continue  # handled separately for advanced scenarios
 
+                    # Only plot resource utilization for the largest operations:
+                    # - 1M for small payload
+                    # - 100k for medium payload
+                    is_largest_small = (payload == "small" and it == 1000000)
+                    is_largest_medium = (payload == "medium" and it == 100000)
+                    if not (is_largest_small or is_largest_medium):
+                        continue
+
                     workload_df = p_df[p_df["iterations"] == it]
                     payload_label = "128 B" if payload == "small" else "4 KB"
                     it_label = f"{it//1000}k" if it < 1000000 else "1M"
@@ -372,97 +380,7 @@ def generate_plots():
                     host_sys_val = workload_df["host_system"].dropna().iloc[0] if "host_system" in workload_df.columns and not workload_df["host_system"].dropna().empty else host_sys
                     host_label = f"Środowisko: {str(host_sys_val).upper()}"
 
-                    # -------------------------------------------------------------
-                    # Plot 1: Throughput scaling vs. Workers for CRUD operations (Point plot, no lines)
-                    # -------------------------------------------------------------
-                    crud_data = workload_df[workload_df["category"].isin(crud_ops)]
-                    if not crud_data.empty:
-                        fig, axes = plt.subplots(2, 2, figsize=(12, 10), sharex=True)
-                        axes = axes.flatten()
-
-                        for idx, op in enumerate(crud_ops):
-                            ax = axes[idx]
-                            op_data = crud_data[crud_data["category"] == op]
-                            if not op_data.empty:
-                                sns.lineplot(
-                                    data=op_data,
-                                    x="workers",
-                                    y="throughput_ops_sec",
-                                    hue="max_cpus",
-                                    marker="o",
-                                    linestyle="None",  # Do not connect with lines
-                                    ax=ax,
-                                    linewidth=0.0,     # Ensure no lines are drawn
-                                    palette="tab10"
-                                )
-                            ax.set_title(f"Operacja: {op_translation[op]}", fontsize=12, fontweight='bold')
-                            ax.set_ylabel("Przepustowość [operacji/s]")
-                            ax.set_xlabel("Liczba procesów klienckich")
-                            ax.set_xticks([1, 2, 4, 8])
-                            ax.grid(True, linestyle="--", alpha=0.5)
-                            ax.legend(title="Limit CPU serwera")
-
-                        plt.suptitle(f"{sys.upper()}: Skalowanie przepustowości CRUD ({host_label})\n(Rozmiar rekordu: {payload_label}, {it_label} operacji/klient)", fontsize=14, fontweight='bold', y=0.98)
-                        plt.tight_layout()
-                        
-                        fig.savefig(os.path.join(sys_output_dir, f"throughput_cpu_scaling_{payload}_{it}.pdf"), format="pdf", bbox_inches="tight")
-                        fig.savefig(os.path.join(sys_output_dir, f"throughput_cpu_scaling_{payload}_{it}.png"), dpi=300, bbox_inches="tight")
-                        plt.close(fig)
-                        print(f"Generated: {sys}/{host_sys}/throughput_cpu_scaling_{payload}_{it} (PDF/PNG)")
-
-                    # -------------------------------------------------------------
-                    # Plot 2: Latency percentiles (p50, p95, p99) vs. Workers (Point plot, no lines)
-                    # Plotted for maximum available CPU limit
-                    # -------------------------------------------------------------
-                    max_cpu_val = workload_df["max_cpus"].max()
-                    lat_data = workload_df[(workload_df["max_cpus"] == max_cpu_val) & (workload_df["category"].isin(crud_ops))]
-                    
-                    if not lat_data.empty:
-                        fig, axes = plt.subplots(2, 2, figsize=(12, 10), sharex=True)
-                        axes = axes.flatten()
-
-                        for idx, op in enumerate(crud_ops):
-                            ax = axes[idx]
-                            op_data = lat_data[lat_data["category"] == op]
-                            if not op_data.empty:
-                                melted = op_data.melt(
-                                    id_vars=["workers"],
-                                    value_vars=["latency_p50_ms", "latency_p95_ms", "latency_p99_ms"],
-                                    var_name="percentile",
-                                    value_name="latency"
-                                )
-                                melted["percentile"] = melted["percentile"].map({
-                                    "latency_p50_ms": "Mediana (p50)",
-                                    "latency_p95_ms": "Percentyl 95 (p95)",
-                                    "latency_p99_ms": "Percentyl 99 (p99)"
-                                })
-
-                                sns.lineplot(
-                                    data=melted,
-                                    x="workers",
-                                    y="latency",
-                                    hue="percentile",
-                                    marker="s",
-                                    linestyle="None",  # Do not connect with lines
-                                    ax=ax,
-                                    linewidth=0.0,     # Ensure no lines are drawn
-                                    palette="Set1"
-                                )
-                            ax.set_title(f"Operacja: {op_translation[op]}", fontsize=12, fontweight='bold')
-                            ax.set_ylabel("Opóźnienie [ms]")
-                            ax.set_xlabel("Liczba procesów klienckich")
-                            ax.set_xticks([1, 2, 4, 8])
-                            ax.set_yscale("log")
-                            ax.grid(True, which="both", linestyle="--", alpha=0.5)
-                            ax.legend(title="Metryka opóźnienia")
-
-                        plt.suptitle(f"{sys.upper()}: Opóźnienia operacji (skala logarytmiczna, {host_label})\n(Konfiguracja: {max_cpu_val} CPU, Rozmiar rekordu: {payload_label}, {it_label} operacji/klient)", fontsize=14, fontweight='bold', y=0.98)
-                        plt.tight_layout()
-                        
-                        fig.savefig(os.path.join(sys_output_dir, f"latency_percentiles_{payload}_{it}.pdf"), format="pdf", bbox_inches="tight")
-                        fig.savefig(os.path.join(sys_output_dir, f"latency_percentiles_{payload}_{it}.png"), dpi=300, bbox_inches="tight")
-                        plt.close(fig)
-                        print(f"Generated: {sys}/{host_sys}/latency_percentiles_{payload}_{it} (PDF/PNG)")
+                    # Plot 1: Throughput scaling plots disabled (data consolidated in LaTeX performance tables)
 
                     # -------------------------------------------------------------
                     # Plot 3: CPU, RAM & Disk Utilization in time (insert operation - 2x2 Grid timeline)
@@ -475,7 +393,7 @@ def generate_plots():
                         
                         if not best_run.empty:
                             samples_count = best_run["resource_samples"].iloc[0]
-                            if samples_count < 15:
+                            if samples_count < 30:
                                 skipped_resource_plots.append({
                                     "system": sys.upper(),
                                     "host": host_sys.upper(),
@@ -483,10 +401,11 @@ def generate_plots():
                                     "iterations": f"{it//1000}k" if it < 1000000 else "1M",
                                     "cpus": int(max_cpu_val),
                                     "workers": int(max_workers),
+                                    "operation": "insert",
                                     "samples": int(samples_count)
                                 })
                             
-                            if samples_count >= 15:
+                            if samples_count >= 30:
                                 run_id = best_run["run_id"].iloc[0]
                                 stats_file = os.path.join(DATA_DIR, sys, host_sys, run_id, payload, str(it), f"workers-{max_workers}", "stats_insert.csv")
                                 
@@ -578,67 +497,93 @@ def generate_plots():
                                             plt.tight_layout()
                                             
                                             fig.savefig(os.path.join(sys_output_dir, f"resource_utilization_{payload}_{it}.pdf"), format="pdf", bbox_inches="tight")
-                                            fig.savefig(os.path.join(sys_output_dir, f"resource_utilization_{payload}_{it}.png"), dpi=300, bbox_inches="tight")
                                             plt.close(fig)
-                                            print(f"Generated: {sys}/{host_sys}/resource_utilization_{payload}_{it} (PDF/PNG)")
+                                            print(f"Generated: {sys}/{host_sys}/resource_utilization_{payload}_{it} (PDF)")
                                     except Exception as e:
                                         print(f"Warning: Failed to generate resource utilization timeline for {stats_file}: {e}")
 
             # -------------------------------------------------------------
-            # Plot 4: Payload comparison (Small vs Medium)
-            # Plotted for maximum available CPU limit and 4 workers
+            # Plot 4: Payload comparison (Small vs Medium) combined on subplots
+            # Plotted for 1M small, 100k medium, max CPU (4) and max workers (8 or 1)
             # -------------------------------------------------------------
-            its_for_payload_comp = sys_df[sys_df["iterations"] > 0]["iterations"].unique()
-            for it in its_for_payload_comp:
-                max_cpu_val = sys_df[sys_df["iterations"] == it]["max_cpus"].max()
-                df_payload_comp = sys_df[
-                    (sys_df["max_cpus"] == max_cpu_val) & 
-                    (sys_df["iterations"] == it) & 
-                    (sys_df["workers"] == 4) & 
-                    (sys_df["category"].isin(crud_ops))
-                ]
-
-                if len(df_payload_comp["payload_size"].unique()) >= 2:
-                    fig, ax = plt.subplots(figsize=(10, 6))
-
-                    df_plot = df_payload_comp.copy()
-                    df_plot["Rozmiar ładunku (Payload)"] = df_plot["payload_size"].map({
-                        "small": "Mały (128 B)",
-                        "medium": "Średni (4 KB)"
-                    })
-                    df_plot["Operacja"] = df_plot["category"].map(op_translation)
-
-                    sns.barplot(
-                        data=df_plot,
-                        x="Operacja",
-                        y="throughput_ops_sec",
-                        hue="Rozmiar ładunku (Payload)",
-                        ax=ax,
-                        edgecolor="0.2",
-                        errorbar=None
-                    )
-                    
-                    host_sys_val = sys_df["host_system"].dropna().iloc[0] if "host_system" in sys_df.columns and not sys_df["host_system"].dropna().empty else host_sys
-                    host_label = f"Środowisko: {str(host_sys_val).upper()}"
-                    
-                    it_label = f"{it//1000}k" if it < 1000000 else "1M"
-                    ax.set_title(f"Wpływ rozmiaru rekordu na przepustowość {sys.upper()} ({host_label})\n(Konfiguracja: {max_cpu_val} CPU, 4 procesy klienckie, {it_label} operacji/klient)", fontsize=12, fontweight='bold')
-                    ax.set_ylabel("Przepustowość [operacji/s]")
-                    ax.set_xlabel("Operacja bazodanowa")
-                    ax.grid(True, linestyle="--", alpha=0.5, axis='y')
-
-                    for container in ax.containers:
-                        labels = [f'{int(v):,}' for v in container.datavalues]
-                        ax.bar_label(container, labels=labels, label_type='edge', padding=3, fontsize=9)
-
-                    plt.tight_layout()
-                    fig.savefig(os.path.join(sys_output_dir, f"payload_comparison_{it}.pdf"), format="pdf", bbox_inches="tight")
-                    fig.savefig(os.path.join(sys_output_dir, f"payload_comparison_{it}.png"), dpi=300, bbox_inches="tight")
-                    plt.close(fig)
-                    print(f"Generated: {sys}/{host_sys}/payload_comparison_{it} (PDF/PNG)")
+            df_crud_all = sys_df[sys_df["category"].isin(crud_ops)]
+            
+            df_small_all = df_crud_all[df_crud_all["payload_size"] == "small"]
+            df_medium_all = df_crud_all[df_crud_all["payload_size"] == "medium"]
+            
+            df_small_plot = pd.DataFrame()
+            df_medium_plot = pd.DataFrame()
+            
+            if not df_small_all.empty:
+                # Find maximum iterations (preferably 1M)
+                max_it_small = df_small_all["iterations"].max()
+                df_small_sub = df_small_all[df_small_all["iterations"] == max_it_small]
+                # Find maximum CPUs (preferably 4)
+                max_cpu_small = df_small_sub["max_cpus"].max()
+                df_small_sub = df_small_sub[df_small_sub["max_cpus"] == max_cpu_small]
+                # Find maximum workers (preferably 8)
+                max_workers_small = df_small_sub["workers"].max()
+                df_small_plot = df_small_sub[df_small_sub["workers"] == max_workers_small]
+                
+            if not df_medium_all.empty:
+                # Find maximum iterations (preferably 100k)
+                max_it_medium = df_medium_all["iterations"].max()
+                df_medium_sub = df_medium_all[df_medium_all["iterations"] == max_it_medium]
+                # Find maximum CPUs (preferably 4)
+                max_cpu_medium = df_medium_sub["max_cpus"].max()
+                df_medium_sub = df_medium_sub[df_medium_sub["max_cpus"] == max_cpu_medium]
+                # Find maximum workers (preferably 8)
+                max_workers_medium = df_medium_sub["workers"].max()
+                df_medium_plot = df_medium_sub[df_medium_sub["workers"] == max_workers_medium]
+                
+            df_payload_comp = pd.concat([df_small_plot, df_medium_plot])
+            
+            if not df_payload_comp.empty and len(df_payload_comp["payload_size"].unique()) >= 2:
+                fig, ax = plt.subplots(figsize=(8, 6))
+                
+                df_plot = df_payload_comp.copy()
+                df_plot["Rozmiar ładunku (Payload)"] = df_plot["payload_size"].map({
+                    "small": "Mały (128 B)",
+                    "medium": "Średni (4 KB)"
+                })
+                df_plot["Operacja"] = df_plot["category"].map(op_translation)
+                
+                sns.barplot(
+                    data=df_plot,
+                    x="Operacja",
+                    y="throughput_ops_sec",
+                    hue="Rozmiar ładunku (Payload)",
+                    ax=ax,
+                    edgecolor="0.2",
+                    errorbar=None
+                )
+                
+                it_s_label = f"{int(max_it_small)//1000}k" if max_it_small < 1000000 else "1M"
+                it_m_label = f"{int(max_it_medium)//1000}k" if max_it_medium < 1000000 else "1M"
+                
+                # Check CPU and worker configurations to display in title
+                cpu_label = f"{int(max_cpu_small)} CPU"
+                workers_label = f"{int(max_workers_small)} kl." if max_workers_small == max_workers_medium else f"kl.: S:{int(max_workers_small)}/M:{int(max_workers_medium)}"
+                
+                ax.set_title(f"Porównanie przepustowości: {it_s_label} (Mały) vs {it_m_label} (Średni)\n(Konfiguracja: {cpu_label}, {workers_label})", fontsize=11, fontweight='bold')
+                ax.set_ylabel("Przepustowość [operacji/s]")
+                ax.set_xlabel("Operacja bazodanowa")
+                ax.grid(True, linestyle="--", alpha=0.5, axis='y')
+                
+                for container in ax.containers:
+                    labels = [f'{int(v):,}' for v in container.datavalues]
+                    ax.bar_label(container, labels=labels, label_type='edge', padding=3, fontsize=9)
+                
+                host_sys_val = sys_df["host_system"].dropna().iloc[0] if "host_system" in sys_df.columns and not sys_df["host_system"].dropna().empty else host_sys
+                host_label = f"Środowisko: {str(host_sys_val).upper()}"
+                plt.suptitle(f"Wpływ rozmiaru rekordu na przepustowość {sys.upper()} ({host_label})", fontsize=13, fontweight='bold', y=0.98)
+                plt.tight_layout()
+                fig.savefig(os.path.join(sys_output_dir, "payload_comparison.pdf"), format="pdf", bbox_inches="tight")
+                plt.close(fig)
+                print(f"Generated: {sys}/{host_sys}/payload_comparison (PDF)")
 
             # -------------------------------------------------------------
-            # Plot 5: Advanced/Fixed categories comparison (mix, queue, json_doc)
+            # Plot 5: Advanced/Fixed categories comparison (mix, queue, json_doc) combined on subplots
             # -------------------------------------------------------------
             fixed_ops_map = {
                 "mix_50W_50R": "Mieszany (50/50)",
@@ -647,31 +592,43 @@ def generate_plots():
                 "queue": "Kolejka (push/pop)",
                 "doc_insert": "Dokument JSON: Zapis",
                 "doc_read": "Dokument JSON: Odczyt",
+                "doc_read_partial": "Dokument JSON: Odczyt częściowy",
                 "doc_update_partial": "Dokument JSON: Aktualizacja",
                 "doc_increment": "Dokument JSON: Inkrementacja",
                 "doc_delete": "Dokument JSON: Usuwanie"
             }
 
+            valid_payloads = []
             for payload in payloads:
                 max_cpu_val = sys_df[sys_df["iterations"] == 0]["max_cpus"].max()
                 max_workers = sys_df[sys_df["iterations"] == 0]["workers"].max()
-                
                 df_advanced = sys_df[
                     (sys_df["payload_size"] == payload) &
                     (sys_df["max_cpus"] == max_cpu_val) &
                     (sys_df["workers"] == max_workers) &
                     (sys_df["category"].isin(fixed_ops_map.keys()))
                 ]
-
                 if not df_advanced.empty:
-                    fig, ax = plt.subplots(figsize=(12, 6))
-
+                    valid_payloads.append((payload, max_cpu_val, max_workers))
+            valid_payloads = sorted(valid_payloads, key=lambda x: x[0])
+            
+            if valid_payloads:
+                fig, axes = plt.subplots(1, len(valid_payloads), figsize=(8 * len(valid_payloads), 6), squeeze=False)
+                axes = axes.flatten()
+                
+                for idx, (payload, max_cpu_val, max_workers) in enumerate(valid_payloads):
+                    ax = axes[idx]
+                    df_advanced = sys_df[
+                        (sys_df["payload_size"] == payload) &
+                        (sys_df["max_cpus"] == max_cpu_val) &
+                        (sys_df["workers"] == max_workers) &
+                        (sys_df["category"].isin(fixed_ops_map.keys()))
+                    ]
                     df_plot = df_advanced.copy()
                     df_plot["Typ testu"] = df_plot["category"].map(fixed_ops_map)
                     df_plot = df_plot.dropna(subset=["Typ testu"])
-                    
                     df_plot = df_plot.sort_values(by="throughput_ops_sec", ascending=False)
-
+                    
                     if not df_plot.empty:
                         sns.barplot(
                             data=df_plot,
@@ -684,28 +641,26 @@ def generate_plots():
                             edgecolor="0.2",
                             errorbar=None
                         )
-
-                        host_sys_val = sys_df["host_system"].dropna().iloc[0] if "host_system" in sys_df.columns and not sys_df["host_system"].dropna().empty else host_sys
-                        host_label = f"Środowisko: {str(host_sys_val).upper()}"
-
                         payload_label = "128 B" if payload == "small" else "4 KB"
-                        ax.set_title(f"Przepustowość w zaawansowanych scenariuszach {sys.upper()} ({host_label})\n(Konfiguracja: {max_cpu_val} CPU, {max_workers} procesów klienckich, rozmiar rekordu: {payload_label})", fontsize=12, fontweight='bold')
+                        ax.set_title(f"Rozmiar ładunku: {payload_label}\n(Konfiguracja: {max_cpu_val} CPU, {max_workers} kl.)", fontsize=11, fontweight='bold')
                         ax.set_xlabel("Przepustowość [operacji/s]")
                         ax.set_ylabel("Scenariusz testowy")
                         ax.grid(True, linestyle="--", alpha=0.5, axis='x')
-
+                        
                         for container in ax.containers:
                             labels = [f' {int(v):,}' for v in container.datavalues]
                             ax.bar_label(container, labels=labels, label_type='edge', padding=3, fontsize=9)
-
-                        plt.tight_layout()
-                        fig.savefig(os.path.join(sys_output_dir, f"advanced_scenarios_{payload}.pdf"), format="pdf", bbox_inches="tight")
-                        fig.savefig(os.path.join(sys_output_dir, f"advanced_scenarios_{payload}.png"), dpi=300, bbox_inches="tight")
-                        plt.close(fig)
-                        print(f"Generated: {sys}/{host_sys}/advanced_scenarios_{payload} (PDF/PNG)")
+                            
+                host_sys_val = sys_df["host_system"].dropna().iloc[0] if "host_system" in sys_df.columns and not sys_df["host_system"].dropna().empty else host_sys
+                host_label = f"Środowisko: {str(host_sys_val).upper()}"
+                plt.suptitle(f"Przepustowość w zaawansowanych scenariuszach {sys.upper()} ({host_label})", fontsize=13, fontweight='bold', y=0.98)
+                plt.tight_layout()
+                fig.savefig(os.path.join(sys_output_dir, "advanced_scenarios.pdf"), format="pdf", bbox_inches="tight")
+                plt.close(fig)
+                print(f"Generated: {sys}/{host_sys}/advanced_scenarios (PDF)")
 
             # -------------------------------------------------------------
-            # Generate Latency Tables (CSV and LaTeX format)
+            # Generate Performance Tables (Throughput and Latency; CSV and LaTeX format)
             # -------------------------------------------------------------
             for payload in payloads:
                 p_df = sys_df[sys_df["payload_size"] == payload]
@@ -723,6 +678,7 @@ def generate_plots():
                         
                         table_df = lat_data[[
                             "category_pl", "max_cpus", "workers", 
+                            "throughput_ops_sec",
                             "latency_mean_ms", "latency_p50_ms", "latency_p95_ms", "latency_p99_ms"
                         ]].copy()
                         table_df = table_df.sort_values(by=["category_pl", "max_cpus", "workers"])
@@ -731,6 +687,7 @@ def generate_plots():
                             "category_pl": "Operacja",
                             "max_cpus": "CPU Limit",
                             "workers": "Procesy Klienckie",
+                            "throughput_ops_sec": "Przepustowosc [ops/s]",
                             "latency_mean_ms": "Srednia [ms]",
                             "latency_p50_ms": "Mediana (p50) [ms]",
                             "latency_p95_ms": "Percentyl 95 (p95) [ms]",
@@ -748,19 +705,21 @@ def generate_plots():
                             f.write("% Tabela wygenerowana automatycznie\n")
                             f.write("\\begin{table}[ht]\n")
                             f.write("\\centering\n")
-                            f.write("\\begin{tabular}{llcrrrr}\n")
+                            f.write("\\resizebox{\\textwidth}{!}{%\n")
+                            f.write("\\begin{tabular}{llcrrrrr}\n")
                             f.write("\\toprule\n")
-                            f.write("Operacja & CPU & Klienci & Średnia [ms] & Mediana (p50) [ms] & p95 [ms] & p99 [ms] \\\\\n")
+                            f.write("Operacja & CPU & Klienci & Przepustowość [op./s] & Średnia [ms] & Mediana (p50) [ms] & p95 [ms] & p99 [ms] \\\\\n")
                             f.write("\\midrule\n")
                             
                             for _, row in table_df.iterrows():
                                 f.write(f"{row['category_pl']} & {row['max_cpus']} CPU & {row['workers']} & "
-                                        f"{row['latency_mean_ms']:.4f} & {row['latency_p50_ms']:.4f} & "
+                                        f"{row['throughput_ops_sec']:.1f} & {row['latency_mean_ms']:.4f} & {row['latency_p50_ms']:.4f} & "
                                         f"{row['latency_p95_ms']:.4f} & {row['latency_p99_ms']:.4f} \\\\\n")
                             
                             f.write("\\bottomrule\n")
-                            f.write("\\end{tabular}\n")
-                            f.write(f"\\caption{{Opóźnienia operacji bazy danych {sys.upper()} (Rozmiar rekordu: {payload_label}, {it_label} operacji/klient)}}\n")
+                            f.write("\\end{tabular}%\n")
+                            f.write("}\n")
+                            f.write(f"\\caption{{Wyniki wydajnościowe i opóźnienia operacji bazy danych {sys.upper()} (Rozmiar rekordu: {payload_label}, {it_label} operacji/klient)}}\n")
                             f.write(f"\\label{{tab:latency_{sys}_{payload}_{it}}}\n")
                             f.write("\\end{table}\n")
                         print(f"Generated LaTeX code: {sys}/{host_sys}/latency_table_{payload}_{it}.tex")
@@ -780,57 +739,112 @@ def generate_plots():
                         all_ops_translation = {**op_translation, **fixed_ops_map}
                         res_data["category_pl"] = res_data["category"].map(all_ops_translation).fillna(res_data["category"])
                         
-                        table_df = res_data[[
-                            "category_pl", "max_cpus", "workers", 
-                            "cpu_db_mean_perc", "mem_db_mean_mib", 
-                            "cpu_client_mean_perc", "mem_client_mean_mib",
-                            "io_db_read_mib", "io_db_write_mib",
-                            "resource_samples"
-                        ]].copy()
-                        table_df = table_df.sort_values(by=["category_pl", "max_cpus", "workers"])
+                        is_embedded = sys.lower() in ["berkeleydb", "leveldb", "rocksdb"]
                         
-                        csv_df = table_df.rename(columns={
-                            "category_pl": "Operacja",
-                            "max_cpus": "CPU Limit",
-                            "workers": "Procesy Klienckie",
-                            "cpu_db_mean_perc": "CPU Baza [%]",
-                            "mem_db_mean_mib": "RAM Baza [MiB]",
-                            "cpu_client_mean_perc": "CPU Klient [%]",
-                            "mem_client_mean_mib": "RAM Klient [MiB]",
-                            "io_db_read_mib": "Odczyt Baza [MiB]",
-                            "io_db_write_mib": "Zapis Baza [MiB]",
-                            "resource_samples": "Liczba probek"
-                        })
-                        csv_path = os.path.join(sys_output_dir, f"resource_table_{payload}_{it}.csv")
-                        csv_df.to_csv(csv_path, index=False)
-                        print(f"Generated table: {sys}/{host_sys}/resource_table_{payload}_{it}.csv")
-                        
-                        tex_path = os.path.join(sys_output_dir, f"resource_table_{payload}_{it}.tex")
-                        payload_label = "128 B" if payload == "small" else "4 KB"
-                        it_label = f"{it//1000}k" if it > 0 else "zaawansowane"
-                        
-                        with open(tex_path, "w", encoding="utf-8") as f:
-                            f.write("% Tabela wygenerowana automatycznie\n")
-                            f.write("\\begin{table}[ht]\n")
-                            f.write("\\centering\n")
-                            f.write("\\begin{tabular}{llcrrrrcc}\n")
-                            f.write("\\toprule\n")
-                            f.write("Operacja & CPU & Klienci & CPU DB [\\%] & RAM DB [MiB] & CPU Kl. [\\%] & RAM Kl. [MiB] & We/Wy DB [MiB] & Próbki \\\\\n")
-                            f.write("\\midrule\n")
+                        if is_embedded:
+                            table_df = res_data[[
+                                "category_pl", "max_cpus", "workers", 
+                                "cpu_client_mean_perc", "mem_client_mean_mib",
+                                "io_client_read_mib", "io_client_write_mib",
+                                "resource_samples"
+                            ]].copy()
+                            table_df = table_df.sort_values(by=["category_pl", "max_cpus", "workers"])
                             
-                            for _, row in table_df.iterrows():
-                                db_io = f"{row['io_db_read_mib']:.1f}/{row['io_db_write_mib']:.1f}"
-                                f.write(f"{row['category_pl']} & {row['max_cpus']} CPU & {row['workers']} & "
-                                        f"{row['cpu_db_mean_perc']:.1f}\\% & {row['mem_db_mean_mib']:.1f} & "
-                                        f"{row['cpu_client_mean_perc']:.1f}\\% & {row['mem_client_mean_mib']:.1f} & "
-                                        f"{db_io} & {int(row['resource_samples'])} \\\\\n")
-                                        
-                            f.write("\\bottomrule\n")
-                            f.write("\\end{tabular}\n")
-                            f.write(f"\\caption{{Zużycie zasobów kontenerów {sys.upper()} (Rozmiar rekordu: {payload_label}, {it_label})}}\n")
-                            f.write(f"\\label{{tab:resources_{sys}_{payload}_{it}}}\n")
-                            f.write("\\end{table}\n")
-                        print(f"Generated LaTeX code: {sys}/{host_sys}/resource_table_{payload}_{it}.tex")
+                            csv_df = table_df.rename(columns={
+                                "category_pl": "Operacja",
+                                "max_cpus": "CPU Limit",
+                                "workers": "Procesy Klienckie",
+                                "cpu_client_mean_perc": "CPU Klient [%]",
+                                "mem_client_mean_mib": "RAM Klient [MiB]",
+                                "io_client_read_mib": "Odczyt Klient [MiB]",
+                                "io_client_write_mib": "Zapis Klient [MiB]",
+                                "resource_samples": "Liczba probek"
+                            })
+                            csv_path = os.path.join(sys_output_dir, f"resource_table_{payload}_{it}.csv")
+                            csv_df.to_csv(csv_path, index=False)
+                            print(f"Generated table: {sys}/{host_sys}/resource_table_{payload}_{it}.csv")
+                            
+                            tex_path = os.path.join(sys_output_dir, f"resource_table_{payload}_{it}.tex")
+                            payload_label = "128 B" if payload == "small" else "4 KB"
+                            it_label = f"{it//1000}k" if it > 0 else "zaawansowane"
+                            
+                            with open(tex_path, "w", encoding="utf-8") as f:
+                                f.write("% Tabela wygenerowana automatycznie\n")
+                                f.write("\\begin{table}[ht]\n")
+                                f.write("\\centering\n")
+                                f.write("\\resizebox{\\textwidth}{!}{%\n")
+                                f.write("\\begin{tabular}{llcrrcc}\n")
+                                f.write("\\toprule\n")
+                                f.write("Operacja & CPU & Klienci & CPU Kl. [\\%] & RAM Kl. [MiB] & We/Wy Kl. [MiB] & Próbki \\\\\n")
+                                f.write("\\midrule\n")
+                                
+                                for _, row in table_df.iterrows():
+                                    client_io = f"{row['io_client_read_mib']:.1f}/{row['io_client_write_mib']:.1f}"
+                                    f.write(f"{row['category_pl']} & {row['max_cpus']} CPU & {row['workers']} & "
+                                            f"{row['cpu_client_mean_perc']:.1f}\\% & {row['mem_client_mean_mib']:.1f} & "
+                                            f"{client_io} & {int(row['resource_samples'])} \\\\\n")
+                                            
+                                f.write("\\bottomrule\n")
+                                f.write("\\end{tabular}%\n")
+                                f.write("}\n")
+                                f.write(f"\\caption{{Zużycie zasobów kontenera aplikacji klienckiej (wbudowany silnik {sys.upper()}, Rozmiar rekordu: {payload_label}, {it_label})}}\n")
+                                f.write(f"\\label{{tab:resources_{sys}_{payload}_{it}}}\n")
+                                f.write("\\end{table}\n")
+                            print(f"Generated LaTeX code: {sys}/{host_sys}/resource_table_{payload}_{it}.tex")
+                        else:
+                            table_df = res_data[[
+                                "category_pl", "max_cpus", "workers", 
+                                "cpu_db_mean_perc", "mem_db_mean_mib", 
+                                "cpu_client_mean_perc", "mem_client_mean_mib",
+                                "io_db_read_mib", "io_db_write_mib",
+                                "resource_samples"
+                            ]].copy()
+                            table_df = table_df.sort_values(by=["category_pl", "max_cpus", "workers"])
+                            
+                            csv_df = table_df.rename(columns={
+                                "category_pl": "Operacja",
+                                "max_cpus": "CPU Limit",
+                                "workers": "Procesy Klienckie",
+                                "cpu_db_mean_perc": "CPU Baza [%]",
+                                "mem_db_mean_mib": "RAM Baza [MiB]",
+                                "cpu_client_mean_perc": "CPU Klient [%]",
+                                "mem_client_mean_mib": "RAM Klient [MiB]",
+                                "io_db_read_mib": "Odczyt Baza [MiB]",
+                                "io_db_write_mib": "Zapis Baza [MiB]",
+                                "resource_samples": "Liczba probek"
+                            })
+                            csv_path = os.path.join(sys_output_dir, f"resource_table_{payload}_{it}.csv")
+                            csv_df.to_csv(csv_path, index=False)
+                            print(f"Generated table: {sys}/{host_sys}/resource_table_{payload}_{it}.csv")
+                            
+                            tex_path = os.path.join(sys_output_dir, f"resource_table_{payload}_{it}.tex")
+                            payload_label = "128 B" if payload == "small" else "4 KB"
+                            it_label = f"{it//1000}k" if it > 0 else "zaawansowane"
+                            
+                            with open(tex_path, "w", encoding="utf-8") as f:
+                                f.write("% Tabela wygenerowana automatycznie\n")
+                                f.write("\\begin{table}[ht]\n")
+                                f.write("\\centering\n")
+                                f.write("\\resizebox{\\textwidth}{!}{%\n")
+                                f.write("\\begin{tabular}{llcrrrrcc}\n")
+                                f.write("\\toprule\n")
+                                f.write("Operacja & CPU & Klienci & CPU DB [\\%] & RAM DB [MiB] & CPU Kl. [\\%] & RAM Kl. [MiB] & We/Wy DB [MiB] & Próbki \\\\\n")
+                                f.write("\\midrule\n")
+                                
+                                for _, row in table_df.iterrows():
+                                    db_io = f"{row['io_db_read_mib']:.1f}/{row['io_db_write_mib']:.1f}"
+                                    f.write(f"{row['category_pl']} & {row['max_cpus']} CPU & {row['workers']} & "
+                                            f"{row['cpu_db_mean_perc']:.1f}\\% & {row['mem_db_mean_mib']:.1f} & "
+                                            f"{row['cpu_client_mean_perc']:.1f}\\% & {row['mem_client_mean_mib']:.1f} & "
+                                            f"{db_io} & {int(row['resource_samples'])} \\\\\n")
+                                            
+                                f.write("\\bottomrule\n")
+                                f.write("\\end{tabular}%\n")
+                                f.write("}\n")
+                                f.write(f"\\caption{{Zużycie zasobów kontenerów {sys.upper()} (Rozmiar rekordu: {payload_label}, {it_label})}}\n")
+                                f.write(f"\\label{{tab:resources_{sys}_{payload}_{it}}}\n")
+                                f.write("\\end{table}\n")
+                            print(f"Generated LaTeX code: {sys}/{host_sys}/resource_table_{payload}_{it}.tex")
 
             # -------------------------------------------------------------
             # Generate Execution Summary (CSV and LaTeX format)
@@ -870,22 +884,140 @@ def generate_plots():
                 f.write("% Tabela wygenerowana automatycznie\n")
                 f.write("\\begin{table}[ht]\n")
                 f.write("\\centering\n")
+                f.write("\\resizebox{\\textwidth}{!}{%\n")
                 f.write("\\begin{tabular}{lllcc}\n")
                 f.write("\\toprule\n")
                 f.write("Scenariusz testowy & Rozmiar rekordu & Typ obciążenia & Wykonano & Ukończono [\\%] \\\\\n")
                 f.write("\\midrule\n")
                 
                 for _, row in summary_df.iterrows():
+                    pct_esc = str(row['Procent ukończenia']).replace("%", "\\%")
                     f.write(f"{row['Operacja']} & {row['Rozmiar rekordu']} & {row['Liczba operacji']} & "
-                            f"{row['Wykonane konfiguracje']} & {row['Procent ukończenia']} \\\\\n")
+                            f"{row['Wykonane konfiguracje']} & {pct_esc} \\\\\n")
                             
                 f.write("\\bottomrule\n")
-                f.write("\\end{tabular}\n")
+                f.write("\\end{tabular}%\n")
+                f.write("}\n")
                 f.write(f"\\caption{{Podsumowanie wykonanych testów wydajnościowych dla systemu {sys.upper()} (Suma konfiguracji CPU i procesów klienckich)}}\n")
                 f.write(f"\\label{{tab:executed_tests_{sys}}}\n")
                 f.write("\\end{table}\n")
             print(f"Generated LaTeX code: {sys}/{host_sys}/executed_tests_summary.tex")
 
+        # Generate comparative tables across all databases for the current host system
+        print(f"\nGenerating comparative tables for host system: {host_sys}...")
+        systems_list = ['redis', 'memcached', 'leveldb', 'rocksdb', 'couchbase', 'tarantool', 'foundationdb', 'berkeleydb']
+        sys_display = {
+            'redis': 'Redis',
+            'memcached': 'Memcached',
+            'leveldb': 'LevelDB*',
+            'rocksdb': 'RocksDB*',
+            'couchbase': 'Couchbase',
+            'tarantool': 'Tarantool',
+            'foundationdb': 'FoundationDB',
+            'berkeleydb': 'BerkeleyDB'
+        }
+        
+        # 1. Comparative Performance Table
+        rows_perf = []
+        for sys_name in systems_list:
+            sys_df = df[(df['system'] == sys_name) & (df['payload_size'] == 'small') & (df['max_cpus'] == 4)]
+            if sys_df.empty:
+                continue
+                
+            workers_val = 1 if sys_name in ['leveldb', 'rocksdb'] else 8
+            sys_df = sys_df[sys_df['workers'] == workers_val]
+            
+            sys_row = {'system': sys_display[sys_name]}
+            for cat in ['insert', 'read', 'update', 'delete']:
+                cat_df = sys_df[sys_df['category'] == cat]
+                if not cat_df.empty:
+                    thr = cat_df['throughput_ops_sec'].iloc[0]
+                    p99 = cat_df['latency_p99_ms'].iloc[0]
+                    sys_row[f'{cat}_thr'] = f"{thr:.1f}"
+                    sys_row[f'{cat}_p99'] = f"{p99:.3f}"
+                else:
+                    sys_row[f'{cat}_thr'] = "n/a"
+                    sys_row[f'{cat}_p99'] = "n/a"
+            rows_perf.append(sys_row)
+            
+        if rows_perf:
+            perf_df = pd.DataFrame(rows_perf)
+            perf_tex_path = os.path.join(os.path.dirname(__file__), "..", "magisterka", f"tabelka_porownawcza_wydajnosc_{host_sys}.tex")
+            with open(perf_tex_path, "w", encoding="utf-8") as f:
+                f.write("% Tabela wygenerowana automatycznie\n")
+                f.write("\\begin{table}[ht]\n")
+                f.write("\\centering\n")
+                f.write("\\resizebox{\\textwidth}{!}{%\n")
+                f.write("\\begin{tabular}{lcrrccrrcc}\n")
+                f.write("\\toprule\n")
+                f.write(" & \\multicolumn{2}{c}{\\textbf{Zapis (Insert)}} & \\multicolumn{2}{c}{\\textbf{Odczyt (Read)}} & \\multicolumn{2}{c}{\\textbf{Aktualizacja (Update)}} & \\multicolumn{2}{c}{\\textbf{Usuwanie (Delete)}} \\\\\n")
+                f.write("\\cmidrule(r){2-3} \\cmidrule(r){4-5} \\cmidrule(r){6-7} \\cmidrule(r){8-9}\n")
+                f.write("Baza danych & Przep. [op./s] & p99 [ms] & Przep. [op./s] & p99 [ms] & Przep. [op./s] & p99 [ms] & Przep. [op./s] & p99 [ms] \\\\\n")
+                f.write("\\midrule\n")
+                for _, row in perf_df.iterrows():
+                    f.write(f"{row['system']} & {row['insert_thr']} & {row['insert_p99']} & "
+                            f"{row['read_thr']} & {row['read_p99']} & {row['update_thr']} & {row['update_p99']} & "
+                            f"{row['delete_thr']} & {row['delete_p99']} \\\\\n")
+                f.write("\\bottomrule\n")
+                f.write("\\end{tabular}%\n")
+                f.write("}\n")
+                f.write(f"\\caption{{Porównanie przepustowości i opóźnień p99 dla operacji CRUD (Rekord 128 B, środowisko {host_sys.upper()}, 4 CPU, 8 procesów klienckich, *dla LevelDB/RocksDB 1 proces)}}\n")
+                f.write(f"\\label{{tab:porownanie_crud_{host_sys}}}\n")
+                f.write("\\end{table}\n")
+            print(f"Generated comparative performance table: {perf_tex_path}")
+            
+        # 2. Comparative Resource Table
+        rows_res = []
+        for sys_name in systems_list:
+            sys_df = df[(df['system'] == sys_name) & (df['payload_size'] == 'small') & (df['max_cpus'] == 4)]
+            if sys_df.empty:
+                continue
+                
+            workers_val = 1 if sys_name in ['leveldb', 'rocksdb'] else 8
+            sys_df = sys_df[sys_df['workers'] == workers_val]
+            
+            sys_row = {'system': sys_display[sys_name]}
+            for cat in ['insert', 'read']:
+                cat_df = sys_df[sys_df['category'] == cat]
+                if not cat_df.empty:
+                    cpu_db = cat_df['cpu_db_mean_perc'].iloc[0]
+                    mem_db = cat_df['mem_db_mean_mib'].iloc[0]
+                    io_read = cat_df['io_db_read_mib'].iloc[0]
+                    io_write = cat_df['io_db_write_mib'].iloc[0]
+                    sys_row[f'{cat}_cpu'] = f"{cpu_db:.1f}\\%"
+                    sys_row[f'{cat}_mem'] = f"{mem_db:.1f}"
+                    sys_row[f'{cat}_io'] = f"{io_read:.1f}/{io_write:.1f}"
+                else:
+                    sys_row[f'{cat}_cpu'] = "n/a"
+                    sys_row[f'{cat}_mem'] = "n/a"
+                    sys_row[f'{cat}_io'] = "n/a"
+            rows_res.append(sys_row)
+            
+        if rows_res:
+            res_df = pd.DataFrame(rows_res)
+            res_tex_path = os.path.join(os.path.dirname(__file__), "..", "magisterka", f"tabelka_porownawcza_zasoby_{host_sys}.tex")
+            with open(res_tex_path, "w", encoding="utf-8") as f:
+                f.write("% Tabela wygenerowana automatycznie\n")
+                f.write("\\begin{table}[ht]\n")
+                f.write("\\centering\n")
+                f.write("\\resizebox{\\textwidth}{!}{%\n")
+                f.write("\\begin{tabular}{lcrccrcc}\n")
+                f.write("\\toprule\n")
+                f.write(" & \\multicolumn{3}{c}{\\textbf{Zapis (Insert)}} & \\multicolumn{3}{c}{\\textbf{Odczyt (Read)}} \\\\\n")
+                f.write("\\cmidrule(r){2-4} \\cmidrule(r){5-7}\n")
+                f.write("Baza danych & CPU DB & RAM DB [MiB] & We/Wy DB [MiB] & CPU DB & RAM DB [MiB] & We/Wy DB [MiB] \\\\\n")
+                f.write("\\midrule\n")
+                for _, row in res_df.iterrows():
+                    f.write(f"{row['system']} & {row['insert_cpu']} & {row['insert_mem']} & {row['insert_io']} & "
+                            f"{row['read_cpu']} & {row['read_mem']} & {row['read_io']} \\\\\n")
+                f.write("\\bottomrule\n")
+                f.write("\\end{tabular}%\n")
+                f.write("}\n")
+                f.write(f"\\caption{{Porównanie zużycia zasobów (średnie CPU bazy, RAM bazy oraz skumulowane We/Wy odczyt/zapis) dla operacji CRUD (Rekord 128 B, środowisko {host_sys.upper()}, 4 CPU, 8 procesów klienckich, *dla LevelDB/RocksDB 1 proces)}}\n")
+                f.write(f"\\label{{tab:porownanie_zasobow_{host_sys}}}\n")
+                f.write("\\end{table}\n")
+            print(f"Generated comparative resource table: {res_tex_path}")
+            
     # Write skipped resource plots to LaTeX table
     tex_skipped_path = os.path.join(os.path.dirname(__file__), "..", "magisterka", "tabelka_zasobow_skipped.tex")
     try:
@@ -893,6 +1025,7 @@ def generate_plots():
             f.write("% Tabela wygenerowana automatycznie przez skrypt plots/process_results.py\n")
             f.write("\\begin{table}[ht]\n")
             f.write("\\centering\n")
+            f.write("\\resizebox{\\textwidth}{!}{%\n")
             f.write("\\begin{tabular}{llcccc}\n")
             f.write("\\toprule\n")
             f.write("Baza danych & System operacyjny & Rozmiar ładunku & Typ obciążenia & Limit CPU & Próbki \\\\\n")
@@ -905,7 +1038,8 @@ def generate_plots():
             else:
                 f.write("\\multicolumn{6}{c}{Wszystkie konfiguracje spełniły kryterium minimalnej liczby próbek ($\\ge 30$)} \\\\\n")
             f.write("\\bottomrule\n")
-            f.write("\\end{tabular}\n")
+            f.write("\\end{tabular}%\n")
+            f.write("}\n")
             f.write("\\caption{Konfiguracje testowe niespełniające kryterium minimalnej liczby 30 próbek dla wykresów zużycia zasobów}\n")
             f.write("\\label{tab:resource_samples_skipped}\n")
             f.write("\\end{table}\n")
@@ -913,7 +1047,119 @@ def generate_plots():
     except Exception as e:
         print(f"Warning: Failed to write skipped resource plots table: {e}")
 
+    # Generate the final ranking table based on Ubuntu (native Linux) results
+    generate_ranking_table()
+
     print(f"\nAll plots and tables generated successfully. Check output folder: {OUTPUT_DIR}")
+
+def generate_ranking_table():
+    print("\nCalculating final ranking and scores based on Ubuntu (native Linux) results...")
+    csv_path = os.path.join(os.path.dirname(__file__), "aggregated_results_ubuntu.csv")
+    if not os.path.exists(csv_path):
+        print(f"Warning: {csv_path} not found. Skipping ranking table generation.")
+        return
+        
+    df = pd.read_csv(csv_path)
+    
+    systems = ['redis', 'memcached', 'leveldb', 'rocksdb', 'couchbase', 'tarantool', 'foundationdb', 'berkeleydb']
+    sys_display = {
+        'redis': 'Redis',
+        'memcached': 'Memcached',
+        'leveldb': 'LevelDB*',
+        'rocksdb': 'RocksDB*',
+        'couchbase': 'Couchbase',
+        'tarantool': 'Tarantool',
+        'foundationdb': 'FoundationDB',
+        'berkeleydb': 'BerkeleyDB'
+    }
+    
+    static_scores = {
+        'foundationdb': 1500,
+        'tarantool': 1450,
+        'redis': 1400,
+        'couchbase': 1250,
+        'berkeleydb': 950,
+        'rocksdb': 600,
+        'memcached': 350,
+        'leveldb': 350
+    }
+    
+    functional_scores = {
+        'redis': 700,
+        'tarantool': 700,
+        'couchbase': 700,
+        'memcached': 350,
+        'leveldb': 350,
+        'rocksdb': 350,
+        'berkeleydb': 350,
+        'foundationdb': 300,
+    }
+    
+    points_scale = [14, 12, 10, 8, 6, 4, 2, 0]
+    perf_scores = {sys: 0 for sys in systems}
+    case_count = 0
+    
+    df_crud = df[df['category'].isin(['insert', 'read', 'update', 'delete'])]
+    groups = df_crud.groupby(['payload_size', 'category', 'iterations', 'max_cpus', 'workers'])
+    
+    for name, group in groups:
+        case_count += 1
+        sys_throughput = {}
+        for sys in systems:
+            sys_df = group[group['system'] == sys]
+            if not sys_df.empty:
+                sys_throughput[sys] = sys_df['throughput_ops_sec'].iloc[0]
+            else:
+                sys_throughput[sys] = 0.0
+                
+        sorted_sys = sorted(systems, key=lambda s: sys_throughput[s], reverse=True)
+        
+        for rank, sys in enumerate(sorted_sys):
+            points = points_scale[rank] if rank < len(points_scale) else 0
+            if sys_throughput[sys] == 0.0:
+                points = 0
+            perf_scores[sys] += points
+            
+    print(f"Total ranked CRUD cases: {case_count}")
+    
+    rows = []
+    for sys in systems:
+        static = static_scores[sys]
+        func = functional_scores[sys]
+        perf = perf_scores[sys]
+        total = static + func + perf
+        pct = (total / 5560.0) * 100.0
+        rows.append({
+            'system_id': sys,
+            'system': sys_display[sys],
+            'static': static,
+            'func': func,
+            'perf': perf,
+            'total': total,
+            'pct': f"{pct:.1f}\\%"
+        })
+        
+    rows = sorted(rows, key=lambda x: x['total'], reverse=True)
+    
+    ranking_tex_path = os.path.join(os.path.dirname(__file__), "..", "magisterka", "tabelka_ranking_koncowy.tex")
+    with open(ranking_tex_path, "w", encoding="utf-8") as f:
+        f.write("% Tabela wygenerowana automatycznie\n")
+        f.write("\\begin{table}[ht]\n")
+        f.write("\\centering\n")
+        f.write("\\resizebox{\\textwidth}{!}{%\n")
+        f.write("\\begin{tabular}{ccrccrc}\n")
+        f.write("\\toprule\n")
+        f.write("Pozycja & Baza danych & Cechy statyczne & Funkcjonalność & Wydajność & Suma punktów & \\% maks. oceny \\\\\n")
+        f.write("\\midrule\n")
+        for idx, row in enumerate(rows):
+            f.write(f"{idx+1} & {row['system']} & {row['static']} & {row['func']} & {row['perf']} & {row['total']} & {row['pct']} \\\\\n")
+        f.write("\\bottomrule\n")
+        f.write("\\end{tabular}%\n")
+        f.write("}\n")
+        f.write("\\caption{Końcowy ranking wielokryterialny badanych systemów bazodanowych na podstawie wyników w środowisku Ubuntu}\n")
+        f.write("\\label{tab:ranking_koncowy}\n")
+        f.write("\\end{table}\n")
+    print(f"Generated final ranking table: {ranking_tex_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Aggregates benchmark results and generates plots.")
